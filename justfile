@@ -1,16 +1,25 @@
 default:
-    just --list
+    @just --list
+
+[group('infra')]
+infra command:
+    # Injects decrypted secrets into terraform
+    sops exec-env secrets/infrastructure.encoded.env 'terraform -chdir=infrastructure {{command}}'
 
 [group('debug')]
-connect ipv4_address:
+connect username ipv4_address:
     #!/usr/bin/env sh
-    tmpkey=$(mktemp)
-    trap 'rm -f "$tmpkey"' EXIT
+    # This creates a temporary file from the decrypted content,
+    # which gets passed to ssh as the identity
+    # Once it is complete (ssh tunnel is closed) the file gets removed
 
-    sops -d infrastructure/maintenance-key.encoded.id > "$tmpkey"
-    chmod 600 "$tmpkey"
-    ssh -i "$tmpkey" root@{{ipv4_address}}
+    tmpkey=$(mktemp) # Create temporary file
+    trap 'rm -f "$tmpkey"' EXIT # Ensure the file is delete once script is complete
+
+    sops -d infrastructure/maintenance-key.encoded.id > "$tmpkey" # Write the decrypted content to the file
+    chmod go-rwx "$tmpkey" # Lock down file permissions, necessary due to ssh's security stance
+    ssh -i "$tmpkey" {{username}}@{{ipv4_address}} # Open tunnel
 
 [group('secrets')]
-rotate:
+rotate-dek:
     printf "Rotating data encryption keys"
