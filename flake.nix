@@ -31,8 +31,10 @@
       # Development Environments
       devShells = withPkgs (pkgs: {
         default = pkgs.mkShell {
-          packages = [
-            pkgs.terraform
+          packages = with pkgs; [
+            terraform
+            sops
+            age
           ];
         };
       });

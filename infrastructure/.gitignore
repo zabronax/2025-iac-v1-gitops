@@ -1,0 +1,6 @@
+# Ignore dependencies
+.terraform
+
+# Ignore state files
+# They might contain sensitive information
+*tfstate*
