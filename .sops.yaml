@@ -12,3 +12,9 @@ creation_rules:
       - age:
           - *admin
           - *larsg
+  # SSH-Keys
+  - path_regex: infrastructure/maintenance-key(\.pub)?$
+    key_groups:
+      - age:
+          - *admin
+          - *larsg
