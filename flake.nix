@@ -33,6 +33,7 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             terraform
+            just
             sops
             age
           ];
