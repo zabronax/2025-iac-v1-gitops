@@ -16,7 +16,7 @@ connect username ipv4_address:
     tmpkey=$(mktemp) # Create temporary file
     trap 'rm -f "$tmpkey"' EXIT # Ensure the file is delete once script is complete
 
-    sops -d infrastructure/maintenance-key.encoded.id > "$tmpkey" # Write the decrypted content to the file
+    sops -d secrets/maintenance-key.encoded.id > "$tmpkey" # Write the decrypted content to the file
     chmod go-rwx "$tmpkey" # Lock down file permissions, necessary due to ssh's security stance
     ssh -i "$tmpkey" {{username}}@{{ipv4_address}} # Open tunnel
 
