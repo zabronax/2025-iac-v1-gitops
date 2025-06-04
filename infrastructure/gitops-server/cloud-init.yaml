@@ -1,0 +1,95 @@
+#cloud-config
+hostname: gitops-server
+manage_etc_hosts: true
+
+users:
+  - name: debian
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+
+package_update: true
+package_upgrade: true
+packages:
+  - git
+  - curl
+  - ca-certificates
+  - gnupg
+  - lsb-release
+
+write_files:
+  - path: /opt/deploy/deploy.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      cd /opt/app
+
+      # Safely fetch and reset to origin/${source_branch}
+      git fetch origin
+      LOCAL=$(git rev-parse @)
+      REMOTE=$(git rev-parse origin/${source_branch})
+
+      if [ "$LOCAL" != "$REMOTE" ]; then
+        echo "Changes detected, updating..."
+        git reset --hard origin/${source_branch}
+
+        echo "Pulling latest docker images"
+        docker compose --file ${compose_path} pull
+
+        echo "Applying changes with zero-downtime"
+        docker compose --file ${compose_path} up --detach
+      else
+        echo "No changes detected"
+      fi
+
+  - path: /etc/systemd/system/git-autosync.service
+    content: |
+      [Unit]
+      Description=Git autosync and Docker Compose deployment
+      After=network.target
+
+      [Service]
+      Type=oneshot
+      WorkingDirectory=/opt/app
+      ExecStart=/opt/deploy/deploy.sh
+
+  - path: /etc/systemd/system/git-autosync.timer
+    content: |
+      [Unit]
+      Description=Run git-autosync every ${source_sync_frequency}
+
+      [Timer]
+      OnBootSec=${source_sync_frequency}
+      OnUnitActiveSec=${source_sync_frequency}
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  # Add Docker's official GPG key:
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - bash -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list'
+
+  # Setup Docker
+  - apt-get update
+  - apt-get install --yes docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+  # Clone repository
+  - git clone ${source_repository} /opt/app
+
+  # Setup sync script
+  - chmod +x /opt/deploy/deploy.sh
+  - systemctl daemon-reexec
+  - systemctl daemon-reload
+  - systemctl enable --now docker
+  - systemctl enable --now git-autosync.timer
+  - systemctl start git-autosync.service
+
+  # Lock down SSH
+  - sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+  - systemctl restart ssh
+
+final_message: "Server setup and autosyncing"
